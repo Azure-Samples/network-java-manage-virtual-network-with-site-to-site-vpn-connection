@@ -1,24 +1,19 @@
-/**
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for
- * license information.
- */
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
-package com.microsoft.azure.management.network.samples;
-
-import com.microsoft.azure.management.Azure;
-import com.microsoft.azure.management.network.LocalNetworkGateway;
-import com.microsoft.azure.management.network.Network;
-import com.microsoft.azure.management.network.VirtualNetworkGateway;
-import com.microsoft.azure.management.network.VirtualNetworkGatewayConnection;
-import com.microsoft.azure.management.network.VirtualNetworkGatewaySkuName;
-import com.microsoft.azure.management.resources.fluentcore.arm.Region;
-import com.microsoft.azure.management.resources.fluentcore.utils.SdkContext;
-import com.microsoft.azure.management.samples.Utils;
-import com.microsoft.rest.LogLevel;
-
-import java.io.File;
-import java.util.List;
+package com.azure.resourcemanager.network.samples;
+import com.azure.core.credential.TokenCredential;
+import com.azure.core.http.policy.HttpLogDetailLevel;
+import com.azure.core.management.AzureEnvironment;
+import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.resourcemanager.AzureResourceManager;
+import com.azure.resourcemanager.network.models.LocalNetworkGateway;
+import com.azure.resourcemanager.network.models.Network;
+import com.azure.resourcemanager.network.models.VirtualNetworkGateway;
+import com.azure.resourcemanager.network.models.VirtualNetworkGatewaySkuName;
+import com.azure.core.management.Region;
+import com.azure.core.management.profile.AzureProfile;
+import com.azure.resourcemanager.samples.Utils;
 
 /**
  * Azure Network sample for managing virtual network gateway.
@@ -34,23 +29,23 @@ public final class ManageVpnGatewaySite2SiteConnection {
 
     /**
      * Main function which runs the actual sample.
-     * @param azure instance of the azure client
+     * @param azureResourceManager instance of the azure client
      * @return true if sample runs successfully
      */
-    public static boolean runSample(Azure azure) {
+    public static boolean runSample(AzureResourceManager azureResourceManager) {
         final Region region = Region.US_WEST2;
-        final String rgName = SdkContext.randomResourceName("rg", 20);
-        final String vnetName = SdkContext.randomResourceName("vnet", 20);
-        final String vpnGatewayName = SdkContext.randomResourceName("vngw", 20);
-        final String localGatewayName = SdkContext.randomResourceName("lngw", 20);
-        final String connectionName = SdkContext.randomResourceName("con", 20);
+        final String rgName = Utils.randomResourceName(azureResourceManager, "rg", 20);
+        final String vnetName = Utils.randomResourceName(azureResourceManager, "vnet", 20);
+        final String vpnGatewayName = Utils.randomResourceName(azureResourceManager, "vngw", 20);
+        final String localGatewayName = Utils.randomResourceName(azureResourceManager, "lngw", 20);
+        final String connectionName = Utils.randomResourceName(azureResourceManager, "con", 20);
 
 
         try {
             //============================================================
             // Create virtual network
             System.out.println("Creating virtual network...");
-            Network network = azure.networks().define(vnetName)
+            Network network = azureResourceManager.networks().define(vnetName)
                     .withRegion(region)
                     .withNewResourceGroup(rgName)
                     .withAddressSpace("10.11.0.0/16")
@@ -63,7 +58,7 @@ public final class ManageVpnGatewaySite2SiteConnection {
             //============================================================
             // Create VPN gateway
             System.out.println("Creating virtual network gateway...");
-            VirtualNetworkGateway vngw = azure.virtualNetworkGateways().define(vpnGatewayName)
+            VirtualNetworkGateway vngw = azureResourceManager.virtualNetworkGateways().define(vpnGatewayName)
                     .withRegion(region)
                     .withExistingResourceGroup(rgName)
                     .withExistingNetwork(network)
@@ -75,7 +70,7 @@ public final class ManageVpnGatewaySite2SiteConnection {
             //============================================================
             // Create local network gateway
             System.out.println("Creating virtual network gateway...");
-            LocalNetworkGateway lngw = azure.localNetworkGateways().define(localGatewayName)
+            LocalNetworkGateway lngw = azureResourceManager.localNetworkGateways().define(localGatewayName)
                     .withRegion(region)
                     .withExistingResourceGroup(rgName)
                     .withIPAddress("40.71.184.214")
@@ -96,27 +91,25 @@ public final class ManageVpnGatewaySite2SiteConnection {
 
             //============================================================
             // List VPN Gateway connections for particular gateway
-            List<VirtualNetworkGatewayConnection> connections = vngw.listConnections();
+            System.out.println("List connections...");
+            vngw.listConnections().forEach(connection -> System.out.println(connection.name()));
+            System.out.println();
 
             //============================================================
             // Reset virtual network gateway
             vngw.reset();
 
             return true;
-        } catch (Exception e) {
-            System.err.println(e.getMessage());
-            e.printStackTrace();
         } finally {
             try {
                 System.out.println("Deleting Resource Group: " + rgName);
-                azure.resourceGroups().beginDeleteByName(rgName);
+                azureResourceManager.resourceGroups().beginDeleteByName(rgName);
             } catch (NullPointerException npe) {
                 System.out.println("Did not create any resources in Azure. No clean up is necessary");
             } catch (Exception g) {
                 g.printStackTrace();
             }
         }
-        return false;
     }
 
     /**
@@ -128,17 +121,21 @@ public final class ManageVpnGatewaySite2SiteConnection {
             //=============================================================
             // Authenticate
 
-            final File credFile = new File(System.getenv("AZURE_AUTH_LOCATION"));
+            final AzureProfile profile = new AzureProfile(AzureEnvironment.AZURE);
+            final TokenCredential credential = new DefaultAzureCredentialBuilder()
+                .authorityHost(profile.getEnvironment().getActiveDirectoryEndpoint())
+                .build();
 
-            Azure azure = Azure.configure()
-                    .withLogLevel(LogLevel.BODY)
-                    .authenticate(credFile)
-                    .withDefaultSubscription();
+            AzureResourceManager azureResourceManager = AzureResourceManager
+                .configure()
+                .withLogLevel(HttpLogDetailLevel.BASIC)
+                .authenticate(credential, profile)
+                .withDefaultSubscription();
 
             // Print selected subscription
-            System.out.println("Selected subscription: " + azure.subscriptionId());
+            System.out.println("Selected subscription: " + azureResourceManager.subscriptionId());
 
-            runSample(azure);
+            runSample(azureResourceManager);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             e.printStackTrace();
